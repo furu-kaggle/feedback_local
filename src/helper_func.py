@@ -88,7 +88,7 @@ class helper:
 
     def get_df(self):
         df = pd.read_csv(self.config["train_df"])
-        df['full_text'] = df['full_text'].apply(lambda x : self.resolve_encodings_and_normalize(x).strip().lower())
+        #df['full_text'] = df['full_text'].apply(lambda x : self.resolve_encodings_and_normalize(x).strip().lower())
         df["text_length"] = df.full_text.apply(lambda x: len(x.split()))
 
         mskf = MultilabelStratifiedKFold(n_splits=self.config['n_fold'], shuffle=True, random_state=self.config["fold_seed"])

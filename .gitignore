@@ -1,0 +1,5 @@
+Loss*.bin
+oof*.csv
+wandb/**/*
+tokenizer*
+src/__pycache__/**

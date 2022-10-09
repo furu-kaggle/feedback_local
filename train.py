@@ -28,14 +28,10 @@ wandb.login(key="dd1758beb9fd6044fdc028dfc9245bba1c869a29")
 import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument('--savedir')
-parser.add_argument('--savedir_drive')
-parser.add_argument('--root_dir')
-parser.add_argument('--train_fold', nargs='*')
+parser.add_argument('--fold', nargs='*')
 args = parser.parse_args()
 savedir = args.savedir
-savedir_drive = args.savedir_drive
-rootdir = args.root_dir
-train_fold = np.array(args.train_fold ,dtype=np.int64)
+train_fold = np.array(args.fold ,dtype=np.int64)
 print(train_fold)
 
 with open(f'{savedir}/trainparam.json') as f:
@@ -47,7 +43,6 @@ import src
 for fold in train_fold:
     print(f"====== Fold: {fold} ======")
     config = CONFIG#[f"fold{fold}"]
-    config["savedir_drive"] = savedir_drive 
     hlc = src.helper(config=config)
     df = hlc.get_df()
     hlc.config["savedir"] = savedir
