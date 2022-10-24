@@ -1,3 +1,4 @@
+from mimetypes import suffix_map
 import torch
 from torch.optim import lr_scheduler
 from transformers import AdamW
@@ -177,17 +178,25 @@ class Trainers:
             if (step % int(self.config["eval_step"]//self.config["train_batch_size"])==0)and((epoch-1)*len(self.train_loader) + step > int(self.config["eval_start"]//self.config["train_batch_size"])):
                 val_epoch_loss, self.oof_df = self.valid_fn()
                 self.model.train()
+                
+                if self.sweep:
+                    criteria_loss = min(self.best_sweep_loss, best_epoch_loss)
+                    if val_epoch_loss <= best_epoch_loss:
+                        best_epoch_loss = val_epoch_loss
+                else:
+                    criteria_loss = best_epoch_loss
 
                 # deep copy the model
-                if val_epoch_loss <= best_epoch_loss:
-                    print(f"Validation Loss Improved ({best_epoch_loss} ---> {val_epoch_loss})")
+                if val_epoch_loss <= criteria_loss:
+                    print(f"Validation Loss Improved ({criteria_loss} ---> {val_epoch_loss})")
                     best_epoch_loss = val_epoch_loss
                     best_model = copy.deepcopy(self.model)
                     best_model.model.half()
                     self.best_model_wts = best_model.state_dict()
-                    PATH = f"{self.config['savedir']}/Loss-Fold{self.fold}.bin"
+                    suffix_tag = "concat" if "pesudo_df_concat" in self.config else "pretrain"
+                    PATH = f"{self.config['savedir']}/Loss-Fold{self.fold}_{suffix_tag}.bin"
                     torch.save(self.best_model_wts, PATH)
-                    oof_path = f"{self.config['savedir']}/oof-Fold{self.fold}.csv"
+                    oof_path = f"{self.config['savedir']}/oof-Fold{self.fold}_{suffix_tag}.csv"
                     self.oof_df.to_csv(oof_path,index=False)
                     # Save a model file from the current directory
                     print(f"Model and oof dataframe Saved")
@@ -252,7 +261,7 @@ class Trainers:
             batch_size=self.config['train_batch_size'], 
             collate_fn = collate_fn, 
             num_workers=os.cpu_count(), 
-            pin_memory=True, 
+            pin_memory=False, 
             shuffle=True,
             drop_last=True,
         )
@@ -266,7 +275,7 @@ class Trainers:
             batch_size=self.config['valid_batch_size'], 
             collate_fn = collate_fn, 
             num_workers=os.cpu_count(), 
-            pin_memory=True, 
+            pin_memory=False, 
             shuffle=False,
             drop_last=False,
         )
@@ -281,22 +290,26 @@ class Trainers:
         else:
             self.best_epoch_loss = np.inf
         val_epoch_loss = self.valid_fn()
+        if (self.sweep)&(self.best_sweep_loss > self.best_epoch_loss):
+            self.best_sweep_loss = self.best_epoch_loss
         for epoch in range(1, self.num_epochs + 1): 
             gc.collect()
             train_epoch_loss, self.best_epoch_loss = self.train_one_epoch(epoch=epoch, best_epoch_loss=self.best_epoch_loss)
+        if (self.sweep)&(self.best_sweep_loss > self.best_epoch_loss):
+            self.best_sweep_loss = self.best_epoch_loss
         
         end = time.time()
         time_elapsed = end - start
         print('Training complete in {:.0f}h {:.0f}m {:.0f}s'.format(
             time_elapsed // 3600, (time_elapsed % 3600) // 60, (time_elapsed % 3600) % 60))
         # save only best model for drive
-        if 'savedir_drive' in self.config:
-            PATH = f"{self.config['savedir_drive']}/Loss-Fold{self.fold}_{self.best_epoch_loss}.bin"
-            torch.save(self.best_model_wts, PATH)
-            oof_path = f"{self.config['savedir_drive']}/oof-Fold{self.fold}_{self.best_epoch_loss}.csv"
-            self.oof_df.to_csv(oof_path, index=False)
-            token_path = f"{self.config['savedir_drive']}/tokenizer_fold{self.fold}_{self.best_epoch_loss}"
-            self.config["tokenizer"].save_pretrained(token_path)
+        # if 'savedir_drive' in self.config:
+        #     PATH = f"{self.config['savedir_drive']}/Loss-Fold{self.fold}_{self.best_epoch_loss}.bin"
+        #     torch.save(self.best_model_wts, PATH)
+        #     oof_path = f"{self.config['savedir_drive']}/oof-Fold{self.fold}_{self.best_epoch_loss}.csv"
+        #     self.oof_df.to_csv(oof_path, index=False)
+        #     token_path = f"{self.config['savedir_drive']}/tokenizer_fold{self.fold}_{self.best_epoch_loss}"
+        #     self.config["tokenizer"].save_pretrained(token_path)
         
         print("Best Loss: {:.4f}".format(self.best_epoch_loss))
     
@@ -308,6 +321,7 @@ class Trainers:
             self.run_training()
 
     def run_sweep(self,sweep_id=None):
+        self.best_sweep_loss = np.inf
         if sweep_id is None:
             sweep_id = wandb.sweep(self.sweep_config)
         if self.config["seed_average"]:

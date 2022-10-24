@@ -37,7 +37,6 @@ output_path = args.output_path
 with open(config_path) as f:
     config = json.load(f)
 
-config = config[f"fold{fold}"]
 config["test_df"] = testdf_path
 config["model_name"] = model_path
 config["weight_path"] = weight_path
@@ -91,7 +90,10 @@ for step, data in bar:
     embs.append(emb.cpu().detach().numpy())
     text_ids.append(text_id)
 
-preds = np.concatenate(preds)
+if config["loss"] == "bce":
+    preds = np.concatenate(preds)*5.0
+else:
+    preds = np.concatenate(preds)
 embs = np.concatenate(embs)
 text_ids = np.concatenate(text_ids)
 gc.collect()

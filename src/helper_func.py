@@ -90,17 +90,27 @@ class helper:
         df = pd.read_csv(self.config["train_df"])
         #df['full_text'] = df['full_text'].apply(lambda x : self.resolve_encodings_and_normalize(x).strip().lower())
         df["text_length"] = df.full_text.apply(lambda x: len(x.split()))
-
-        mskf = MultilabelStratifiedKFold(n_splits=self.config['n_fold'], shuffle=True, random_state=self.config["fold_seed"])
         labels = ["cohesion", "syntax", "vocabulary", "phraseology", "grammar", "conventions"]
-        for fold, ( _, val_) in enumerate(mskf.split(df, df[labels].values)):
-            df.loc[val_ , "kfold"] = int(fold)
+
+        if self.config["make_kfold"]:
+            mskf = MultilabelStratifiedKFold(n_splits=self.config['n_fold'], shuffle=True, random_state=self.config["fold_seed"])
+            for fold, ( _, val_) in enumerate(mskf.split(df, df[labels].values)):
+                df.loc[val_ , "kfold"] = int(fold)
+        else:
+            df["kfold"] = df["fold"]
+
+        if "pesudo_df_concat" in self.config:
+            psdf = pd.read_csv(self.config["pesudo_df_concat"])
+            psdf["kfold"] = -1
+            df = pd.concat([df,psdf]).reset_index(drop=True)
 
         df["kfold"] = df["kfold"].astype(int)
         if "pesudo_df" in self.config:
+            #if you use pesudo_df 1fold train, please set --fold 0
+            df["kfold"] = 0
             psdf = pd.read_csv(self.config["pesudo_df"])
             # dummy fold number
-            psdf["fold"] = 5
+            psdf["kfold"] = 1
             df = pd.concat([df,psdf]).reset_index(drop=True)
 
         if self.config["loss"] == "bce":
@@ -112,6 +122,6 @@ class helper:
 
     def get_test_df(self):
         df = pd.read_csv(self.config["test_df"])
-        df['full_text'] = df['full_text'].apply(lambda x : self.resolve_encodings_and_normalize(x))
+        #df['full_text'] = df['full_text'].apply(lambda x : self.resolve_encodings_and_normalize(x))
         df["text_length"] = df.full_text.apply(lambda x: len(x.split()))
         return df
